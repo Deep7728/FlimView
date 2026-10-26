@@ -1455,3 +1455,76 @@ input, textarea, select {
     width: 120px;
   }
 }
+
+/* ================= ADSTERRA ADS STYLING ================= */
+.ad-banner-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 1.25rem auto;
+  padding: 0.5rem;
+  background: rgba(12, 18, 28, 0.6);
+  border: 1px dashed rgba(0, 210, 255, 0.2);
+  border-radius: var(--radius-md);
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+}
+
+.ad-banner-wrapper.sidebar-ad {
+  margin: 0 0 1.25rem 0;
+  width: 100%;
+}
+
+.ad-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-sub);
+  margin-bottom: 0.35rem;
+}
+
+.ad-banner-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 50px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.btn-smartlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(0, 210, 255, 0.12);
+  border: 1px solid rgba(0, 210, 255, 0.35);
+  color: var(--accent-cyan);
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.btn-smartlink:hover {
+  background: var(--accent-cyan);
+  color: #06090e;
+  box-shadow: var(--glow-blue);
+  transform: translateY(-1px);
+}
+
+.btn-sponsored {
+  background: linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(0, 230, 118, 0.15)) !important;
+  border: 1px solid rgba(0, 230, 118, 0.4) !important;
+  color: var(--accent-green) !important;
+}
+
+.btn-sponsored:hover {
+  background: var(--accent-grad) !important;
+  color: #06090e !important;
+  box-shadow: var(--glow-green) !important;
+}
+
