@@ -50,6 +50,17 @@
       <div class="player-wrapper" id="playerWrapper">
         <video class="player-video" id="mainVideo" preload="metadata" playsinline webkit-playsinline></video>
 
+        <!-- BUFFERING SPINNER -->
+        <div class="player-buffering-spinner" id="playerSpinner" aria-label="Buffering">
+          <div class="spinner-circle"></div>
+        </div>
+
+        <!-- QUICK ACTION FEEDBACK (Play/Pause, +10s, -10s) -->
+        <div class="player-quick-feedback" id="quickFeedback">
+          <div id="quickFeedbackIcon"></div>
+          <span id="quickFeedbackText"></span>
+        </div>
+
         <!-- CUSTOM CONTROLS OVERLAY -->
         <div class="player-controls" id="playerControls">
           <!-- PROGRESS / SEEKBAR -->
@@ -113,6 +124,11 @@
               <!-- Picture-in-Picture -->
               <button class="btn-ctrl" id="pipBtn" title="Picture in Picture">
                 <svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z"/></svg>
+              </button>
+
+              <!-- Theater Mode -->
+              <button class="btn-ctrl" id="theaterBtn" title="Theater Mode (T)">
+                <svg viewBox="0 0 24 24"><path d="M19 6H5c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H5V8h14v8z"/></svg>
               </button>
 
               <!-- Fullscreen -->
@@ -244,6 +260,74 @@
         </div>
       </div>
     </aside>
+  </div>
+
+  <!-- DOWNLOAD MODAL -->
+  <div class="modal-overlay" id="downloadModal">
+    <div class="modal-card download-modal-card">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-green);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <h3 style="font-size:1.15rem;">Download Video</h3>
+        </div>
+        <button class="modal-close-btn" id="closeDownloadBtn">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-top: 1rem;">
+        <div class="download-preview-row">
+          <div class="download-preview-thumb" id="dlThumbBox">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+          <div class="download-preview-info">
+            <h4 id="dlVideoTitle" class="dl-title">Video</h4>
+            <div class="dl-meta">
+              <span class="dl-badge">Original Quality</span>
+              <span id="dlFileSize" class="dl-size">Calculating size...</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="download-options-list">
+          <!-- Primary Direct Stream Download -->
+          <div class="download-option-item active" id="directDownloadOption">
+            <div class="dl-opt-left">
+              <div class="dl-icon-circle direct">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              </div>
+              <div>
+                <div class="dl-opt-title">Direct High-Speed Download</div>
+                <div class="dl-opt-sub">Original source file • Resume supported</div>
+              </div>
+            </div>
+            <button class="btn-primary btn-dl-start" id="startDirectDownloadBtn">
+              <span>Download</span>
+            </button>
+          </div>
+
+          <!-- Turbo Server Mirror (Smart Link) -->
+          <a href="https://demper.org/4/332bf30375476b11e3014c14ab8698ef" target="_blank" rel="noopener noreferrer" class="download-option-item turbo" id="turboDownloadOption">
+            <div class="dl-opt-left">
+              <div class="dl-icon-circle turbo">
+                <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+              </div>
+              <div>
+                <div class="dl-opt-title" style="color: var(--accent-cyan); display:flex; align-items:center; gap:6px;">
+                  <span>⚡ Turbo Mirror / Cloud Fast Pass</span>
+                  <span class="turbo-badge">FAST</span>
+                </div>
+                <div class="dl-opt-sub">Uncapped CDN speed • Instant multi-thread mirror</div>
+              </div>
+            </div>
+            <span class="btn-secondary btn-dl-start">Start Turbo</span>
+          </a>
+        </div>
+
+        <!-- Download status alert -->
+        <div id="dlStatusAlert" class="dl-status-box" style="display:none;">
+          <div class="spinner-circle-sm"></div>
+          <span id="dlStatusText">Starting download...</span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- TOAST CONTAINER -->

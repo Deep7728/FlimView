@@ -183,6 +183,14 @@ app.get('/api/videos', (req, res) => {
   res.json(videos);
 });
 
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '0 MB';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
 // API: Get single video details
 app.get('/api/videos/:id', (req, res) => {
   const videos = readVideos();
@@ -190,7 +198,22 @@ app.get('/api/videos/:id', (req, res) => {
   if (!video) {
     return res.status(404).json({ error: 'Video not found' });
   }
-  res.json(video);
+
+  let sizeBytes = 0;
+  if (video.videoFileName) {
+    const filePath = path.join(VIDEOS_DIR, video.videoFileName);
+    if (fs.existsSync(filePath)) {
+      try {
+        sizeBytes = fs.statSync(filePath).size;
+      } catch (e) {}
+    }
+  }
+
+  res.json({
+    ...video,
+    fileSize: sizeBytes,
+    fileSizeFormatted: formatFileSize(sizeBytes),
+  });
 });
 
 // API: Upload video
@@ -302,7 +325,7 @@ app.post(
   }
 );
 
-// API: Stream video with HTTP 206 Partial Content for smooth seeking & buffering
+// API: Stream video with HTTP 206 Partial Content for ultra-smooth seeking & fluid buffering
 app.get('/api/videos/:id/stream', (req, res) => {
   const videos = readVideos();
   const video = videos.find((v) => v.id === req.params.id);
@@ -324,13 +347,22 @@ app.get('/api/videos/:id/stream', (req, res) => {
   const fileSize = stat.size;
   const range = req.headers.range;
 
+  // Detect accurate MIME type from file extension
+  const ext = (path.extname(video.videoFileName) || '').toLowerCase();
+  let mimeType = 'video/mp4';
+  if (ext === '.webm') mimeType = 'video/webm';
+  else if (ext === '.ogg' || ext === '.ogv') mimeType = 'video/ogg';
+  else if (ext === '.mov') mimeType = 'video/quicktime';
+
   if (range) {
     const parts = range.replace(/bytes=/, "").split("-");
     const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    // Optimized 2.5MB chunk buffer for instant startup and fluid progressive streaming
+    const CHUNK_SIZE = 2.5 * 1024 * 1024;
+    const end = parts[1] ? parseInt(parts[1], 10) : Math.min(start + CHUNK_SIZE - 1, fileSize - 1);
 
     if (start >= fileSize) {
-      res.status(416).send('Requested range not satisfiable\n' + start + ' >= ' + fileSize);
+      res.status(416).set('Content-Range', `bytes */${fileSize}`).send('Requested range not satisfiable');
       return;
     }
 
@@ -340,22 +372,34 @@ app.get('/api/videos/:id/stream', (req, res) => {
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
-      'Content-Type': 'video/mp4',
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=86400, no-transform',
     };
 
     res.writeHead(206, head);
     file.pipe(res);
+
+    req.on('close', () => {
+      file.destroy();
+    });
   } else {
     const head = {
       'Content-Length': fileSize,
-      'Content-Type': 'video/mp4',
+      'Content-Type': mimeType,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=86400, no-transform',
     };
     res.writeHead(200, head);
-    fs.createReadStream(filePath).pipe(res);
+    const file = fs.createReadStream(filePath);
+    file.pipe(res);
+
+    req.on('close', () => {
+      file.destroy();
+    });
   }
 });
 
-// API: Download video file
+// API: Download video file with clean attachment headers & full streaming support
 app.get('/api/videos/:id/download', (req, res) => {
   const videos = readVideos();
   const video = videos.find((v) => v.id === req.params.id);
@@ -373,11 +417,22 @@ app.get('/api/videos/:id/download', (req, res) => {
     return res.status(404).send('Video file does not exist on disk');
   }
 
+  const stat = fs.statSync(filePath);
   const ext = path.extname(video.videoFileName) || '.mp4';
   const cleanTitle = (video.title || 'video').replace(/[/\\?%*:|"<>]/g, '_');
   const downloadFileName = `${cleanTitle}${ext}`;
 
-  res.download(filePath, downloadFileName);
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadFileName}"; filename*=UTF-8''${encodeURIComponent(downloadFileName)}`);
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Length', stat.size);
+  res.setHeader('Accept-Ranges', 'bytes');
+
+  const fileStream = fs.createReadStream(filePath);
+  fileStream.pipe(res);
+
+  req.on('close', () => {
+    fileStream.destroy();
+  });
 });
 
 // API: Increment views

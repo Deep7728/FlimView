@@ -30,96 +30,165 @@ class CustomPlayer {
     this.speedMenu = document.getElementById('speedMenu');
 
     this.pipBtn = document.getElementById('pipBtn');
+    this.theaterBtn = document.getElementById('theaterBtn');
     this.fullscreenBtn = document.getElementById('fullscreenBtn');
     this.fullscreenIcon = document.getElementById('fullscreenIcon');
     this.exitFullscreenIcon = document.getElementById('exitFullscreenIcon');
 
+    this.spinner = document.getElementById('playerSpinner');
+    this.quickFeedback = document.getElementById('quickFeedback');
+    this.quickFeedbackIcon = document.getElementById('quickFeedbackIcon');
+    this.quickFeedbackText = document.getElementById('quickFeedbackText');
+
     this.isScrubbing = false;
+    this.wasPlayingBeforeScrub = false;
     this.hideControlsTimeout = null;
-    this.lastVolume = 1;
+    this.quickFeedbackTimeout = null;
+    this.lastClickTime = 0;
+    this.clickTimer = null;
+
+    // Restore saved volume or default to 1.0
+    const savedVol = localStorage.getItem('flimview_volume');
+    this.lastVolume = savedVol !== null ? parseFloat(savedVol) : 1;
+    this.video.volume = this.lastVolume;
+    if (this.volumeSlider) this.volumeSlider.value = this.lastVolume;
+    this.updateVolumeIcons();
+
+    // Restore saved theater mode
+    if (localStorage.getItem('flimview_theater') === 'true') {
+      const container = document.querySelector('.watch-container');
+      if (container) container.classList.add('theater-mode');
+    }
 
     this.bindEvents();
   }
 
   bindEvents() {
     // Play / Pause toggles
-    this.playPauseBtn.addEventListener('click', () => this.togglePlay());
-    this.video.addEventListener('click', () => this.togglePlay());
+    if (this.playPauseBtn) {
+      this.playPauseBtn.addEventListener('click', () => this.togglePlay(true));
+    }
+
+    // Video Click / Double-Click handling (Left = -10s, Right = +10s, Center = Play/Pause)
+    this.video.addEventListener('click', (e) => {
+      const now = Date.now();
+      const rect = this.video.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const width = rect.width;
+
+      if (now - this.lastClickTime < 300) {
+        // Double Click detected!
+        clearTimeout(this.clickTimer);
+        this.lastClickTime = 0;
+        if (clickX < width * 0.35) {
+          this.seekBy(-10);
+        } else if (clickX > width * 0.65) {
+          this.seekBy(10);
+        } else {
+          this.toggleFullscreen();
+        }
+      } else {
+        this.lastClickTime = now;
+        this.clickTimer = setTimeout(() => {
+          this.togglePlay(true);
+        }, 220);
+      }
+    });
 
     this.video.addEventListener('play', () => {
-      this.playIcon.style.display = 'none';
-      this.pauseIcon.style.display = 'block';
+      if (this.playIcon) this.playIcon.style.display = 'none';
+      if (this.pauseIcon) this.pauseIcon.style.display = 'block';
       this.wrapper.classList.remove('paused');
+      this.hideSpinner();
       this.startHideControlsTimer();
     });
 
     this.video.addEventListener('pause', () => {
-      this.playIcon.style.display = 'block';
-      this.pauseIcon.style.display = 'none';
+      if (this.playIcon) this.playIcon.style.display = 'block';
+      if (this.pauseIcon) this.pauseIcon.style.display = 'none';
       this.wrapper.classList.add('paused');
+      this.hideSpinner();
       this.showControls();
     });
 
+    // Buffering / Loading states for smooth playback indicators
+    this.video.addEventListener('waiting', () => this.showSpinner());
+    this.video.addEventListener('stalled', () => this.showSpinner());
+    this.video.addEventListener('seeking', () => this.showSpinner());
+    this.video.addEventListener('playing', () => this.hideSpinner());
+    this.video.addEventListener('canplay', () => this.hideSpinner());
+    this.video.addEventListener('seeked', () => this.hideSpinner());
+
     // Skips
-    this.skipBackBtn.addEventListener('click', () => this.seekBy(-10));
-    this.skipForwardBtn.addEventListener('click', () => this.seekBy(10));
+    if (this.skipBackBtn) this.skipBackBtn.addEventListener('click', () => this.seekBy(-10));
+    if (this.skipForwardBtn) this.skipForwardBtn.addEventListener('click', () => this.seekBy(10));
 
     // Time Update & Buffer
     this.video.addEventListener('timeupdate', () => this.onTimeUpdate());
     this.video.addEventListener('progress', () => this.onBufferProgress());
     this.video.addEventListener('loadedmetadata', () => {
       this.updateTimeDisplay();
+      this.onBufferProgress();
     });
 
     // Scrubbing & Seeking (Mouse)
-    this.progressContainer.addEventListener('mousedown', (e) => this.startScrubbing(e));
-    window.addEventListener('mousemove', (e) => this.scrub(e));
-    window.addEventListener('mouseup', () => this.stopScrubbing());
+    if (this.progressContainer) {
+      this.progressContainer.addEventListener('mousedown', (e) => this.startScrubbing(e));
+      window.addEventListener('mousemove', (e) => this.scrub(e));
+      window.addEventListener('mouseup', () => this.stopScrubbing());
 
-    // Touch Scrubbing for Mobile & Tablets
-    this.progressContainer.addEventListener('touchstart', (e) => this.startScrubbing(e), { passive: true });
-    window.addEventListener('touchmove', (e) => {
-      if (this.isScrubbing) {
-        this.scrub(e);
-      }
-    }, { passive: true });
-    window.addEventListener('touchend', () => this.stopScrubbing());
+      // Touch Scrubbing for Mobile & Tablets
+      this.progressContainer.addEventListener('touchstart', (e) => this.startScrubbing(e), { passive: true });
+      window.addEventListener('touchmove', (e) => {
+        if (this.isScrubbing) {
+          this.scrub(e);
+        }
+      }, { passive: true });
+      window.addEventListener('touchend', () => this.stopScrubbing());
 
-    // Hover tooltip
-    this.progressContainer.addEventListener('mousemove', (e) => this.updateTooltip(e));
-    this.progressContainer.addEventListener('mouseleave', () => {
-      this.progressTooltip.style.display = 'none';
-    });
+      // Hover tooltip
+      this.progressContainer.addEventListener('mousemove', (e) => this.updateTooltip(e));
+      this.progressContainer.addEventListener('mouseleave', () => {
+        if (this.progressTooltip) this.progressTooltip.style.display = 'none';
+      });
+    }
 
     // Volume
-    this.volumeSlider.addEventListener('input', (e) => this.setVolume(e.target.value));
-    this.volumeBtn.addEventListener('click', () => this.toggleMute());
+    if (this.volumeSlider) {
+      this.volumeSlider.addEventListener('input', (e) => this.setVolume(parseFloat(e.target.value)));
+    }
+    if (this.volumeBtn) {
+      this.volumeBtn.addEventListener('click', () => this.toggleMute());
+    }
 
     // Speed Menu
-    this.speedBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.speedMenu.classList.toggle('show');
-    });
-
-    document.addEventListener('click', (e) => {
-      if (!this.speedMenu.contains(e.target) && e.target !== this.speedBtn) {
-        this.speedMenu.classList.remove('show');
-      }
-    });
-
-    this.speedMenu.querySelectorAll('.speed-option').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const speed = parseFloat(btn.dataset.speed);
-        this.video.playbackRate = speed;
-        this.speedLabel.textContent = speed + 'x';
-        this.speedMenu.querySelectorAll('.speed-option').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.speedMenu.classList.remove('show');
+    if (this.speedBtn && this.speedMenu) {
+      this.speedBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.speedMenu.classList.toggle('show');
       });
-    });
+
+      document.addEventListener('click', (e) => {
+        if (!this.speedMenu.contains(e.target) && e.target !== this.speedBtn) {
+          this.speedMenu.classList.remove('show');
+        }
+      });
+
+      this.speedMenu.querySelectorAll('.speed-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const speed = parseFloat(btn.dataset.speed);
+          this.video.playbackRate = speed;
+          if (this.speedLabel) this.speedLabel.textContent = speed + 'x';
+          this.speedMenu.querySelectorAll('.speed-option').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.speedMenu.classList.remove('show');
+          this.triggerFeedback(`${speed}x Speed`);
+        });
+      });
+    }
 
     // Picture-in-Picture
-    if ('pictureInPictureEnabled' in document) {
+    if ('pictureInPictureEnabled' in document && this.pipBtn) {
       this.pipBtn.addEventListener('click', async () => {
         try {
           if (document.pictureInPictureElement) {
@@ -131,25 +200,31 @@ class CustomPlayer {
           console.error(err);
         }
       });
-    } else {
+    } else if (this.pipBtn) {
       this.pipBtn.style.display = 'none';
     }
 
+    // Theater Mode
+    if (this.theaterBtn) {
+      this.theaterBtn.addEventListener('click', () => this.toggleTheaterMode());
+    }
+
     // Fullscreen
-    this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
-    this.video.addEventListener('dblclick', () => this.toggleFullscreen());
+    if (this.fullscreenBtn) {
+      this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+    }
 
     document.addEventListener('fullscreenchange', () => {
       if (document.fullscreenElement) {
-        this.fullscreenIcon.style.display = 'none';
-        this.exitFullscreenIcon.style.display = 'block';
+        if (this.fullscreenIcon) this.fullscreenIcon.style.display = 'none';
+        if (this.exitFullscreenIcon) this.exitFullscreenIcon.style.display = 'block';
       } else {
-        this.fullscreenIcon.style.display = 'block';
-        this.exitFullscreenIcon.style.display = 'none';
+        if (this.fullscreenIcon) this.fullscreenIcon.style.display = 'block';
+        if (this.exitFullscreenIcon) this.exitFullscreenIcon.style.display = 'none';
       }
     });
 
-    // User activity auto-hide controls (Desktop)
+    // Auto-hide controls
     this.wrapper.addEventListener('mousemove', () => {
       this.showControls();
       if (!this.video.paused) {
@@ -163,7 +238,7 @@ class CustomPlayer {
       }
     });
 
-    // Mobile Touch Show / Hide Controls
+    // Mobile touch controls
     this.wrapper.addEventListener('touchstart', (e) => {
       if (e.target.closest('#playerControls')) return;
       if (this.wrapper.classList.contains('user-active') && !this.video.paused) {
@@ -185,45 +260,104 @@ class CustomPlayer {
         case 'Space':
         case 'KeyK':
           e.preventDefault();
-          this.togglePlay();
+          this.togglePlay(true);
           break;
         case 'ArrowLeft':
+        case 'KeyJ':
           e.preventDefault();
-          this.seekBy(-5);
+          this.seekBy(-10);
           break;
         case 'ArrowRight':
+        case 'KeyL':
           e.preventDefault();
-          this.seekBy(5);
+          this.seekBy(10);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          this.setVolume(Math.min(1, (this.video.volume || 0) + 0.05));
+          this.triggerFeedback(`${Math.round(this.video.volume * 100)}% Vol`);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          this.setVolume(Math.max(0, (this.video.volume || 0) - 0.05));
+          this.triggerFeedback(`${Math.round(this.video.volume * 100)}% Vol`);
           break;
         case 'KeyM':
           e.preventDefault();
-          this.toggleMute();
+          this.toggleMute(true);
+          break;
+        case 'KeyT':
+          e.preventDefault();
+          this.toggleTheaterMode();
           break;
         case 'KeyF':
           e.preventDefault();
           this.toggleFullscreen();
           break;
+        default:
+          // Numeric keys 0-9 to jump to percentage
+          if (e.code.startsWith('Digit')) {
+            const digit = parseInt(e.code.replace('Digit', ''), 10);
+            if (!isNaN(digit) && this.video.duration) {
+              e.preventDefault();
+              this.video.currentTime = (digit / 10) * this.video.duration;
+              this.triggerFeedback(`${digit * 10}%`);
+            }
+          }
+          break;
       }
     });
   }
 
-  togglePlay() {
+  showSpinner() {
+    if (this.wrapper) this.wrapper.classList.add('buffering');
+  }
+
+  hideSpinner() {
+    if (this.wrapper) this.wrapper.classList.remove('buffering');
+  }
+
+  triggerFeedback(text, iconHtml = '') {
+    if (!this.quickFeedback) return;
+    clearTimeout(this.quickFeedbackTimeout);
+    if (this.quickFeedbackIcon) this.quickFeedbackIcon.innerHTML = iconHtml;
+    if (this.quickFeedbackText) this.quickFeedbackText.textContent = text;
+    this.quickFeedback.classList.add('active');
+    this.quickFeedbackTimeout = setTimeout(() => {
+      this.quickFeedback.classList.remove('active');
+    }, 550);
+  }
+
+  togglePlay(withFeedback = false) {
     if (this.video.paused) {
       this.video.play();
+      if (withFeedback) this.triggerFeedback('Play', '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>');
     } else {
       this.video.pause();
+      if (withFeedback) this.triggerFeedback('Pause', '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>');
     }
   }
 
   seekBy(deltaSeconds) {
-    this.video.currentTime = Math.max(0, Math.min(this.video.duration || 0, this.video.currentTime + deltaSeconds));
+    if (!this.video.duration) return;
+    this.video.currentTime = Math.max(0, Math.min(this.video.duration, this.video.currentTime + deltaSeconds));
+    const prefix = deltaSeconds > 0 ? `+${deltaSeconds}s` : `${deltaSeconds}s`;
+    this.triggerFeedback(prefix);
+  }
+
+  toggleTheaterMode() {
+    const container = document.querySelector('.watch-container');
+    if (!container) return;
+    const isTheater = container.classList.toggle('theater-mode');
+    localStorage.setItem('flimview_theater', isTheater ? 'true' : 'false');
+    this.triggerFeedback(isTheater ? 'Theater On' : 'Theater Off');
   }
 
   onTimeUpdate() {
     if (!this.isScrubbing && this.video.duration) {
       const progress = (this.video.currentTime / this.video.duration) * 100;
-      this.progressBarFill.style.width = progress + '%';
-      this.progressScrubber.style.left = progress + '%';
+      if (this.progressBarFill) this.progressBarFill.style.width = progress + '%';
+      if (this.progressScrubber) this.progressScrubber.style.left = progress + '%';
       this.updateTimeDisplay();
     }
   }
@@ -232,11 +366,12 @@ class CustomPlayer {
     if (this.video.duration && this.video.buffered.length > 0) {
       const bufferedEnd = this.video.buffered.end(this.video.buffered.length - 1);
       const bufferPercent = (bufferedEnd / this.video.duration) * 100;
-      this.progressBarBuffer.style.width = bufferPercent + '%';
+      if (this.progressBarBuffer) this.progressBarBuffer.style.width = bufferPercent + '%';
     }
   }
 
   updateTimeDisplay() {
+    if (!this.timeDisplay) return;
     const cur = this.formatTime(this.video.currentTime || 0);
     const dur = this.formatTime(this.video.duration || 0);
     this.timeDisplay.textContent = `${cur} / ${dur}`;
@@ -260,7 +395,9 @@ class CustomPlayer {
   }
 
   startScrubbing(e) {
+    if (!this.video.duration) return;
     this.isScrubbing = true;
+    this.wasPlayingBeforeScrub = !this.video.paused;
     this.scrub(e);
   }
 
@@ -270,18 +407,22 @@ class CustomPlayer {
     const clientX = this.getClientX(e);
     if (clientX === undefined) return;
     const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    this.progressBarFill.style.width = (pos * 100) + '%';
-    this.progressScrubber.style.left = (pos * 100) + '%';
+    if (this.progressBarFill) this.progressBarFill.style.width = (pos * 100) + '%';
+    if (this.progressScrubber) this.progressScrubber.style.left = (pos * 100) + '%';
     this.video.currentTime = pos * this.video.duration;
     this.updateTimeDisplay();
   }
 
   stopScrubbing() {
+    if (!this.isScrubbing) return;
     this.isScrubbing = false;
+    if (this.wasPlayingBeforeScrub) {
+      this.video.play().catch(() => {});
+    }
   }
 
   updateTooltip(e) {
-    if (!this.video.duration) return;
+    if (!this.video.duration || !this.progressTooltip) return;
     const rect = this.progressContainer.getBoundingClientRect();
     const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const targetTime = pos * this.video.duration;
@@ -292,33 +433,38 @@ class CustomPlayer {
   }
 
   setVolume(val) {
-    this.video.volume = val;
-    this.video.muted = val === 0;
+    const clamped = Math.max(0, Math.min(1, val));
+    this.video.volume = clamped;
+    this.video.muted = clamped === 0;
+    if (this.volumeSlider) this.volumeSlider.value = clamped;
+    if (clamped > 0) {
+      this.lastVolume = clamped;
+      localStorage.setItem('flimview_volume', clamped);
+    }
     this.updateVolumeIcons();
   }
 
-  toggleMute() {
+  toggleMute(withFeedback = false) {
     if (this.video.muted || this.video.volume === 0) {
       this.video.muted = false;
-      this.video.volume = this.lastVolume > 0 ? this.lastVolume : 1;
-      this.volumeSlider.value = this.video.volume;
+      const target = this.lastVolume > 0 ? this.lastVolume : 1;
+      this.video.volume = target;
+      if (this.volumeSlider) this.volumeSlider.value = target;
+      if (withFeedback) this.triggerFeedback(`${Math.round(target * 100)}% Vol`);
     } else {
       this.lastVolume = this.video.volume;
       this.video.muted = true;
       this.video.volume = 0;
-      this.volumeSlider.value = 0;
+      if (this.volumeSlider) this.volumeSlider.value = 0;
+      if (withFeedback) this.triggerFeedback('Muted');
     }
     this.updateVolumeIcons();
   }
 
   updateVolumeIcons() {
-    if (this.video.muted || this.video.volume === 0) {
-      this.volumeHighIcon.style.display = 'none';
-      this.volumeMuteIcon.style.display = 'block';
-    } else {
-      this.volumeHighIcon.style.display = 'block';
-      this.volumeMuteIcon.style.display = 'none';
-    }
+    const isMuted = this.video.muted || this.video.volume === 0;
+    if (this.volumeHighIcon) this.volumeHighIcon.style.display = isMuted ? 'none' : 'block';
+    if (this.volumeMuteIcon) this.volumeMuteIcon.style.display = isMuted ? 'block' : 'none';
   }
 
   toggleFullscreen() {
@@ -330,11 +476,11 @@ class CustomPlayer {
   }
 
   showControls() {
-    this.wrapper.classList.add('user-active');
+    if (this.wrapper) this.wrapper.classList.add('user-active');
   }
 
   hideControls() {
-    this.wrapper.classList.remove('user-active');
+    if (this.wrapper) this.wrapper.classList.remove('user-active');
   }
 
   startHideControlsTimer() {
@@ -347,6 +493,7 @@ class CustomPlayer {
   }
 
   loadSource(src) {
+    this.showSpinner();
     this.video.src = src;
     this.video.load();
   }

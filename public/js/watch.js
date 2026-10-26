@@ -1,5 +1,6 @@
 // Watch Page Logic for FlimView
 let currentVideoId = null;
+let currentVideoData = null;
 let player = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -81,6 +82,7 @@ async function loadVideoDetails(id) {
     }
 
     const video = await res.json();
+    currentVideoData = video;
     document.title = `${video.title} - FlimView`;
 
     // Stream source (directly from Cloudflare R2 CDN if available, or streaming endpoint)
@@ -184,14 +186,81 @@ function initWatchPageActions() {
     }
   });
 
-  // Download Video
+  // Download Video Modal & Handling
+  const downloadModal = document.getElementById('downloadModal');
+  const closeDownloadBtn = document.getElementById('closeDownloadBtn');
+  const startDirectBtn = document.getElementById('startDirectDownloadBtn');
+  const dlStatusAlert = document.getElementById('dlStatusAlert');
+  const dlStatusText = document.getElementById('dlStatusText');
+  const dlThumbBox = document.getElementById('dlThumbBox');
+  const dlVideoTitle = document.getElementById('dlVideoTitle');
+  const dlFileSize = document.getElementById('dlFileSize');
+
+  function openDownloadModal() {
+    if (!downloadModal) return;
+    if (currentVideoData) {
+      if (dlVideoTitle) dlVideoTitle.textContent = currentVideoData.title || 'Video';
+      if (dlFileSize) dlFileSize.textContent = currentVideoData.fileSizeFormatted ? `${currentVideoData.fileSizeFormatted} • Full Quality` : 'Full Original Quality';
+      if (dlThumbBox && currentVideoData.thumbnailPath) {
+        dlThumbBox.innerHTML = `<img src="${currentVideoData.thumbnailPath}" alt="Thumbnail" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">`;
+      }
+    }
+    if (dlStatusAlert) dlStatusAlert.style.display = 'none';
+    downloadModal.classList.add('show');
+  }
+
+  function closeDownloadModal() {
+    if (downloadModal) downloadModal.classList.remove('show');
+  }
+
   if (downloadBtn) {
-    downloadBtn.addEventListener('click', () => {
-      showToast('Starting video download...');
+    downloadBtn.addEventListener('click', openDownloadModal);
+  }
+
+  if (closeDownloadBtn) {
+    closeDownloadBtn.addEventListener('click', closeDownloadModal);
+  }
+
+  if (downloadModal) {
+    downloadModal.addEventListener('click', (e) => {
+      if (e.target === downloadModal) closeDownloadModal();
+    });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && downloadModal && downloadModal.classList.contains('show')) {
+      closeDownloadModal();
+    }
+  });
+
+  if (startDirectBtn) {
+    startDirectBtn.addEventListener('click', () => {
+      if (dlStatusAlert && dlStatusText) {
+        dlStatusAlert.style.display = 'flex';
+        dlStatusText.textContent = 'Preparing direct video download...';
+      }
+
+      // Monetization: Open high-converting Smart Link in background tab
       try {
         window.open('https://demper.org/4/332bf30375476b11e3014c14ab8698ef', '_blank');
       } catch (e) {}
-      window.location.href = `/api/videos/${currentVideoId}/download`;
+
+      // Initiate actual smooth browser download
+      const dlLink = document.createElement('a');
+      dlLink.href = `/api/videos/${currentVideoId}/download`;
+      dlLink.setAttribute('download', '');
+      document.body.appendChild(dlLink);
+      dlLink.click();
+      dlLink.remove();
+
+      if (dlStatusText) {
+        setTimeout(() => {
+          dlStatusText.textContent = '✓ Download started! Check your browser downloads.';
+        }, 600);
+      }
+
+      showToast('Starting video download...');
+      setTimeout(() => closeDownloadModal(), 2200);
     });
   }
 
